@@ -1,0 +1,52 @@
+Metadata-Version: 2.1
+Name: gpt-index
+Version: 5.0.13
+Summary: Interface between LLMs and your data
+Home-page: https://github.com/jerryjliu/gpt_index
+License: MIT
+Description-Content-Type: text/markdown
+
+# Tanuki Bot
+
+## Installation
+
+```
+pip install -r requirements.txt
+pip install flask
+pip install chromadb
+```
+
+## Indexing
+
+As we can't send all our content everytime to OpenAI and then pick the answer out we have to create first embeddings which are stored in a DB (can be also pg-vector in the future).
+
+Builds an index by using [LangChain](https://github.com/hwchase17/langchain) - [`ingest_docs.ipynb`](https://gitlab.com/gitlab-org/dev-subdepartment/ask-the-tanuki/-/blob/main/ingest_docs.ipynb)
+
+1.  Loads each markdown file from `/content/` (I .gitignored all files so we don't have duplicates, but copied them in as `/blog` , `/doc` and `/handbook`
+2.  Split the content from metadata in MD header (this metadata is then saved additionally), create meta data for source so we can filter later based on a specific type of content
+3.  Text is split in parts smaller then 1500 characters ( as that is the max size for the model)
+4.  Larger text parts are removed from indexing (for example they could be large templates, etc.)
+5.  All chunks (around 43k atm) are sent to Open ai to create [embeddings](https://platform.openai.com/docs/guides/embeddings) for each content chunk which are then saved to a [Chroma Vector Database](https://www.trychroma.com/)
+6.  The Chroma DB is persisted
+
+## Querying
+
+[https://gitlab.com/gitlab-org/dev-subdepartment/ask-the-tanuki/-/blob/main/apiserver.py](https://gitlab.com/gitlab-org/dev-subdepartment/ask-the-tanuki/-/blob/main/apiserver.py)
+
+We load the Chroma DB and start a flask API on port 5000 (so ndoe can query it behind the scenes). 
+
+__Note: OpenAI API key is required to run locally and stored in environment variable.__
+
+```
+export OPENAI_API_KEY=<API_KEY>
+export FLASK_APP=apiserver.py
+flask run
+```
+
+When a query comes in:
+
+1.  Chroma DB is already loaded into API server
+2.  Chroma supports also filtering based on source (e.g. 'handbook')
+3.  A Similarity search is sent by creating also an embedding for the query. The top results are returned based on vector proximity of the query vector to the previously stored vectors
+4.  Only close results are then taken as a whole and send to OpenAI with a QA chain and `map_reduce` type ([https://python.langchain.com/en/latest/modules/chains/index_examples/vector_db_qa_with_sources.html](https://python.langchain.com/en/latest/modules/chains/index_examples/vector_db_qa_with_sources.html))
+5.  Then I am matching up the source documents and enrich the metadata for the FE so links are clickable, etc.

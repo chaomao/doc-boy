@@ -1,0 +1,8 @@
+version: "3.9"
+services:
+  pgvector:
+    image: "ankane/pgvector"
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - 5433:5432
